@@ -12,12 +12,12 @@ namespace Ligrev;
 
 class RSS {
 
-  function __construct($url, $rooms, $ttl = 300) {
+  function __construct($config) {
     global $db;
-    $this->url = $url;
-    $this->ttl = $ttl;
-    $this->rooms = $rooms;
-    $sql = $db->executeQuery('SELECT request, latest FROM rss WHERE url=? ORDER BY request DESC LIMIT 1;', [$url]);
+    $this->url = $config['url'];
+    $this->ttl = $config['ttl'];
+    $this->rooms = $config['rooms'];
+    $sql = $db->executeQuery('SELECT request, latest FROM rss WHERE url=? ORDER BY request DESC LIMIT 1;', [$this->url]);
     $result = $sql->fetchAll();
     $this->last = array_key_exists(0, $result) ? $result[0] : ["request" => 0, "latest" => 0];
     $this->updateLast = $db->prepare('
@@ -33,9 +33,17 @@ class RSS {
   function update() {
     global $client;
     $this->last['request'] = time();
+    $this->_process($this->_request($this->_connect()));
+  }
+
+  function _connect() {
     $curl = new \Curl\Curl();
     $lv = V_LIGREV;
     $curl->setUserAgent("ligrev/$lv (https://github.com/sylae/ligrev)");
+    return $curl;
+  }
+
+  function _request($curl) {
     $curl->get($this->url);
     if ($curl->error) {
       \Monolog\Registry::CORE()->warning("Failed to retrieve RSS feed", ['code' => $curl->errorCode, 'msg' => $curl->errorMessage]);
@@ -43,7 +51,11 @@ class RSS {
       return false;
     }
     curl_close($curl->curl);
-    $data = \qp($curl->response);
+    return $curl->response;
+  }
+
+  function _process($data) {
+    $data = \qp($data);
     $items = $data->find('item');
     $newest = $this->last['latest'];
     $newItems = [];
@@ -56,6 +68,7 @@ class RSS {
           'channel' => $item->parent('channel')->find('channel>title')->text(),
           'title' => $item->find('title')->text(),
           'link' => $item->find('link')->text(),
+          'author' => $item->find('author')->text(),
           'date' => $published,
           'category' => $item->find('category')->text(),
           'body' => $item->find('description')->text(),

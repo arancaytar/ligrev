@@ -20,7 +20,8 @@ namespace Ligrev {
     $rss = $config['rss'];
     $feeds = [];
     foreach ($rss as $feed) {
-      $feeds[] = new RSS($feed['url'], $feed['rooms'], $feed['ttl']);
+      if (!$feed['class']) $feed['class'] = '\Ligrev\RSS';
+      $feeds[] = new $feed['class']($feed);
     }
   }
 
